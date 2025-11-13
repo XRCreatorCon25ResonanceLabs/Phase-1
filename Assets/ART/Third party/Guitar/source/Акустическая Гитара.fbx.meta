@@ -63,7 +63,7 @@ ModelImporter:
         \u043D\u0430\u043A\u043B\u0430\u0434\u043A\u0430"
     second: {fileID: 2100000, guid: 768ee478affeb4046a95cf778f8a41a9, type: 2}
   materials:
-    materialImportMode: 2
+    materialImportMode: 1
     materialName: 0
     materialSearch: 1
     materialLocation: 1
