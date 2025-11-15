@@ -1,5 +1,4 @@
-﻿// navigation.cs
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -7,45 +6,32 @@ using UnityEngine.InputSystem;
 [RequireComponent(typeof(CharacterController))]
 public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
 {
-    [Header("References")]
     public Transform xrOrigin;
     public Transform teleportPointsParent;
     public List<Transform> teleportPoints = new List<Transform>();
 
-    [Header("Hotspot UI, Audio & Lights (align with teleportPoints by index)")]
-    [Tooltip("Assign a UI GameObject for each teleport point (same ordering as teleportPoints).")]
     public List<GameObject> hotspotUIs = new List<GameObject>();
-    [Tooltip("Assign an AudioSource for each teleport point (same ordering as teleportPoints).")]
     public List<AudioSource> hotspotAudios = new List<AudioSource>();
-    [Tooltip("Assign a GameObject (or parent) that contains the spotlight(s) for each hotspot.")]
     public List<GameObject> hotspotLights = new List<GameObject>();
 
-    [Header("Per-hotspot object toggles (align with teleportPoints by index)")]
-    [Tooltip("Objects to SetActive(true) when this hotspot becomes active.")]
     public List<GameObject> hotspotEnableOnActivate = new List<GameObject>();
-    [Tooltip("Objects to SetActive(false) when this hotspot becomes active.")]
     public List<GameObject> hotspotDisableOnActivate = new List<GameObject>();
 
-    [Tooltip("If true, the first hotspot (index 0) UI/audio/light/toggles will be activated at start.")]
     public bool activateOnStart = true;
 
-    [Header("Teleport Settings")]
-    public float joystickDeadzone = 0.5f;    // right stick horizontal threshold
-    public float inputCooldown = 0.45f;      // seconds between steps
+    public float joystickDeadzone = 0.5f;
+    public float inputCooldown = 0.45f;
     public float teleportHeightOffset = 0.0f;
 
-    [Header("Movement Settings")]
     public float moveSpeed = 1.5f;
     public float stickDeadzone = 0.15f;
-    public LayerMask guitarLayer;            // layer for guitar collider
+    public LayerMask guitarLayer;
     public float raycastDistance = 2f;
     public float gravity = -9.81f;
 
-    [Header("Smooth Teleport Settings")]
     public bool useSmoothTeleport = true;
-    public float lerpDuration = 0.35f;       // seconds to lerp the camera between points
+    public float lerpDuration = 0.35f;
 
-    // runtime
     int currentIndex = 0;
     float lastInputTime = -10f;
     CharacterController cc;
@@ -66,19 +52,15 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
         cc.radius = 0.25f;
         cc.center = new Vector3(0, 0.9f, 0);
 
-        // populate teleport list from parent if provided
         if (teleportPointsParent != null && teleportPoints.Count == 0)
         {
             foreach (Transform t in teleportPointsParent)
                 teleportPoints.Add(t);
         }
 
-        // Try auto-fill hotspot lists so lists align
-        TryAutoFillHotspotLists();
-
+        AutoFillHotspotLists();
         CreateInputActions();
 
-        // Activate first hotspot optionally
         if (teleportPoints.Count > 0)
         {
             if (activateOnStart)
@@ -86,7 +68,7 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
                 DeactivateAllHotspots();
                 ActivateHotspot(0);
             }
-            StartTeleportRoutine(0); // move to first point at start (smooth)
+            StartTeleportRoutine(0);
         }
     }
 
@@ -112,37 +94,31 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
 
     void CreateInputActions()
     {
-        // left joystick (explicit left-hand + gamepad)
         leftStickAction = new InputAction("LeftStick", InputActionType.Value);
         leftStickAction.AddBinding("<Gamepad>/leftStick");
         leftStickAction.AddBinding("<XRController>{LeftHand}/thumbstick");
 
-        // right joystick (explicit right-hand + gamepad)
         rightStickAction = new InputAction("RightStick", InputActionType.Value);
         rightStickAction.AddBinding("<Gamepad>/rightStick");
         rightStickAction.AddBinding("<XRController>{RightHand}/thumbstick");
     }
 
-    void TryAutoFillHotspotLists()
+    void AutoFillHotspotLists()
     {
-        // Ensure lists are at least as long as teleportPoints (fill with nulls)
         while (hotspotUIs.Count < teleportPoints.Count) hotspotUIs.Add(null);
         while (hotspotAudios.Count < teleportPoints.Count) hotspotAudios.Add(null);
         while (hotspotLights.Count < teleportPoints.Count) hotspotLights.Add(null);
         while (hotspotEnableOnActivate.Count < teleportPoints.Count) hotspotEnableOnActivate.Add(null);
         while (hotspotDisableOnActivate.Count < teleportPoints.Count) hotspotDisableOnActivate.Add(null);
 
-        // For any null entries, attempt to find child objects under the teleport point:
         for (int i = 0; i < teleportPoints.Count; i++)
         {
             if (teleportPoints[i] == null) continue;
 
-            // Auto-fill UI
             if (hotspotUIs[i] == null)
             {
                 Transform uiChild = teleportPoints[i].Find("UI");
-                if (uiChild != null)
-                    hotspotUIs[i] = uiChild.gameObject;
+                if (uiChild != null) hotspotUIs[i] = uiChild.gameObject;
                 else
                 {
                     Canvas c = teleportPoints[i].GetComponentInChildren<Canvas>(true);
@@ -150,7 +126,6 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
                 }
             }
 
-            // Auto-fill AudioSource
             if (hotspotAudios[i] == null)
             {
                 AudioSource a = teleportPoints[i].GetComponent<AudioSource>();
@@ -162,48 +137,32 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
                 }
             }
 
-            // Auto-fill Light GameObject
             if (hotspotLights[i] == null)
             {
-                // look for child named "Spotlight" or "Lights"
                 Transform lightChild = teleportPoints[i].Find("Spotlight");
                 if (lightChild == null) lightChild = teleportPoints[i].Find("Lights");
-                if (lightChild != null)
-                {
-                    hotspotLights[i] = lightChild.gameObject;
-                }
+                if (lightChild != null) hotspotLights[i] = lightChild.gameObject;
                 else
                 {
-                    // fallback: find any child that contains a Light component
                     Light anyLight = teleportPoints[i].GetComponentInChildren<Light>(true);
                     if (anyLight != null) hotspotLights[i] = anyLight.gameObject;
                 }
             }
-
-            // Note: hotspotEnableOnActivate / hotspotDisableOnActivate are intended to be set manually in inspector.
-            // We won't auto-fill these because specific objects are typically scene-wide; leave them null if not used.
         }
     }
 
     void DeactivateAllHotspots()
     {
         for (int i = 0; i < hotspotUIs.Count && i < teleportPoints.Count; i++)
-        {
-            if (hotspotUIs[i] != null)
-                hotspotUIs[i].SetActive(false);
-        }
+            if (hotspotUIs[i] != null) hotspotUIs[i].SetActive(false);
+
         for (int i = 0; i < hotspotAudios.Count && i < teleportPoints.Count; i++)
-        {
             if (hotspotAudios[i] != null && hotspotAudios[i].isPlaying)
                 hotspotAudios[i].Stop();
-        }
-        for (int i = 0; i < hotspotLights.Count && i < teleportPoints.Count; i++)
-        {
-            if (hotspotLights[i] != null)
-                hotspotLights[i].SetActive(false);
-        }
 
-        // Revert any per-hotspot toggles (set enableOnActivate -> false, disableOnActivate -> true)
+        for (int i = 0; i < hotspotLights.Count && i < teleportPoints.Count; i++)
+            if (hotspotLights[i] != null) hotspotLights[i].SetActive(false);
+
         for (int i = 0; i < teleportPoints.Count; i++)
         {
             if (hotspotEnableOnActivate.Count > i && hotspotEnableOnActivate[i] != null)
@@ -218,56 +177,41 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
     {
         if (index < 0 || index >= teleportPoints.Count) return;
 
-        // Deactivate previous (all others) for UI/audio/lights
-        for (int i = 0; i < hotspotUIs.Count && i < teleportPoints.Count; i++)
-        {
-            if (i == index) continue;
-            if (hotspotUIs[i] != null)
-                hotspotUIs[i].SetActive(false);
-        }
-        for (int i = 0; i < hotspotAudios.Count && i < teleportPoints.Count; i++)
-        {
-            if (i == index) continue;
-            if (hotspotAudios[i] != null && hotspotAudios[i].isPlaying)
-                hotspotAudios[i].Stop();
-        }
-        for (int i = 0; i < hotspotLights.Count && i < teleportPoints.Count; i++)
-        {
-            if (i == index) continue;
-            if (hotspotLights[i] != null)
-                hotspotLights[i].SetActive(false);
-        }
+        for (int i = 0; i < hotspotUIs.Count; i++)
+            if (i != index && hotspotUIs[i] != null) hotspotUIs[i].SetActive(false);
 
-        // Revert toggles for other hotspots (in case they were left active)
+        for (int i = 0; i < hotspotAudios.Count; i++)
+            if (i != index && hotspotAudios[i] != null && hotspotAudios[i].isPlaying)
+                hotspotAudios[i].Stop();
+
+        for (int i = 0; i < hotspotLights.Count; i++)
+            if (i != index && hotspotLights[i] != null) hotspotLights[i].SetActive(false);
+
         for (int i = 0; i < teleportPoints.Count; i++)
         {
             if (i == index) continue;
 
-            if (hotspotEnableOnActivate.Count > i && hotspotEnableOnActivate[i] != null)
+            if (hotspotEnableOnActivate[i] != null)
                 hotspotEnableOnActivate[i].SetActive(false);
 
-            if (hotspotDisableOnActivate.Count > i && hotspotDisableOnActivate[i] != null)
+            if (hotspotDisableOnActivate[i] != null)
                 hotspotDisableOnActivate[i].SetActive(true);
         }
 
-        // Activate current UI/audio/light
-        if (hotspotUIs.Count > index && hotspotUIs[index] != null)
-            hotspotUIs[index].SetActive(true);
+        if (hotspotUIs[index] != null) hotspotUIs[index].SetActive(true);
 
-        if (hotspotAudios.Count > index && hotspotAudios[index] != null)
+        if (hotspotAudios[index] != null)
         {
             hotspotAudios[index].Stop();
             hotspotAudios[index].Play();
         }
 
-        if (hotspotLights.Count > index && hotspotLights[index] != null)
-            hotspotLights[index].SetActive(true);
+        if (hotspotLights[index] != null) hotspotLights[index].SetActive(true);
 
-        // Apply per-hotspot toggles: enable those that should be active, disable those that should be inactive
-        if (hotspotEnableOnActivate.Count > index && hotspotEnableOnActivate[index] != null)
+        if (hotspotEnableOnActivate[index] != null)
             hotspotEnableOnActivate[index].SetActive(true);
 
-        if (hotspotDisableOnActivate.Count > index && hotspotDisableOnActivate[index] != null)
+        if (hotspotDisableOnActivate[index] != null)
             hotspotDisableOnActivate[index].SetActive(false);
     }
 
@@ -277,29 +221,21 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
 
         Vector2 right = rightStickAction.ReadValue<Vector2>();
 
-        // prioritize right-stick horizontal for teleport steps
         if (Mathf.Abs(right.x) > joystickDeadzone)
         {
             HandleRightStick(right);
-            return; // skip movement this frame when right-stick active
+            return;
         }
 
         HandleLeftStickMovement();
     }
 
-    // ---------------- TELEPORT ----------------
     void HandleRightStick(Vector2 right)
     {
         if (Time.time - lastInputTime < inputCooldown) return;
 
-        if (right.x > joystickDeadzone)
-        {
-            StepNext();
-        }
-        else if (right.x < -joystickDeadzone)
-        {
-            StepPrevious();
-        }
+        if (right.x > joystickDeadzone) StepNext();
+        else if (right.x < -joystickDeadzone) StepPrevious();
 
         lastInputTime = Time.time;
     }
@@ -307,23 +243,20 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
     void StepNext()
     {
         if (teleportPoints.Count == 0) return;
-        int next = (currentIndex + 1) % teleportPoints.Count;
-        currentIndex = next;
+        currentIndex = (currentIndex + 1) % teleportPoints.Count;
         StartTeleportRoutine(currentIndex);
     }
 
     void StepPrevious()
     {
         if (teleportPoints.Count == 0) return;
-        int prev = (currentIndex - 1 + teleportPoints.Count) % teleportPoints.Count;
-        currentIndex = prev;
+        currentIndex = (currentIndex - 1 + teleportPoints.Count) % teleportPoints.Count;
         StartTeleportRoutine(currentIndex);
     }
 
     public void StartTeleportRoutine(int index)
     {
-        if (isTeleporting) return;
-        StartCoroutine(TeleportCoroutine(index));
+        if (!isTeleporting) StartCoroutine(TeleportCoroutine(index));
     }
 
     IEnumerator TeleportCoroutine(int index)
@@ -332,12 +265,14 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
         if (index < 0 || index >= teleportPoints.Count) yield break;
 
         isTeleporting = true;
+
         Transform t = teleportPoints[index];
 
-        // compute target xrOrigin position keeping camera local offset if present
         Vector3 targetPos = t.position + Vector3.up * teleportHeightOffset;
+
         Camera cam = Camera.main;
         Vector3 targetOriginPos;
+
         if (cam != null && cam.transform.parent == xrOrigin)
         {
             Vector3 camLocal = cam.transform.localPosition;
@@ -347,16 +282,12 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
         {
             targetOriginPos = targetPos;
         }
+
         Quaternion targetOriginRot = Quaternion.Euler(0f, t.rotation.eulerAngles.y, 0f);
 
-        // Console message
-        Debug.Log($"Teleported to: {t.name} (Index {index})");
-
-        // manage hotspot UI/audio/light/toggles: deactivate others, activate this
         DeactivateAllHotspots();
         ActivateHotspot(index);
 
-        // disable CharacterController during reposition to avoid physics glitches
         bool hadController = cc != null && cc.enabled;
         if (hadController) cc.enabled = false;
 
@@ -364,16 +295,20 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
         {
             Vector3 startPos = xrOrigin.position;
             Quaternion startRot = xrOrigin.rotation;
+
             float elapsed = 0f;
             while (elapsed < lerpDuration)
             {
                 elapsed += Time.unscaledDeltaTime;
                 float tL = Mathf.Clamp01(elapsed / lerpDuration);
                 float smooth = Mathf.SmoothStep(0f, 1f, tL);
+
                 xrOrigin.position = Vector3.Lerp(startPos, targetOriginPos, smooth);
                 xrOrigin.rotation = Quaternion.Slerp(startRot, targetOriginRot, smooth);
+
                 yield return null;
             }
+
             xrOrigin.position = targetOriginPos;
             xrOrigin.rotation = targetOriginRot;
         }
@@ -388,22 +323,23 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
         isTeleporting = false;
     }
 
-    // ---------------- MOVEMENT ----------------
     void HandleLeftStickMovement()
     {
         Vector2 left = leftStickAction.ReadValue<Vector2>();
         if (left.magnitude < stickDeadzone) left = Vector2.zero;
 
         Transform cam = Camera.main != null ? Camera.main.transform : xrOrigin;
+
         Vector3 forward = cam.forward; forward.y = 0; forward.Normalize();
         Vector3 right = cam.right; right.y = 0; right.Normalize();
 
         Vector3 desired = (forward * left.y + right * left.x) * moveSpeed;
         Vector3 move = ProjectOntoGuitar(desired) * Time.deltaTime;
 
-        // gravity
-        if (cc.isGrounded) verticalVelocity = Vector3.zero;
-        else verticalVelocity += Vector3.up * gravity * Time.deltaTime;
+        if (cc.isGrounded)
+            verticalVelocity = Vector3.zero;
+        else
+            verticalVelocity += Vector3.up * gravity * Time.deltaTime;
 
         cc.Move(move + verticalVelocity * Time.deltaTime);
     }
@@ -417,15 +353,16 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
         return Vector3.ProjectOnPlane(desired, Vector3.up);
     }
 
-    // Optional external helper: teleport by point name
     public void TeleportToByName(string name)
     {
         for (int i = 0; i < teleportPoints.Count; i++)
+        {
             if (teleportPoints[i] != null && teleportPoints[i].name == name)
             {
                 currentIndex = i;
                 StartTeleportRoutine(i);
                 return;
             }
+        }
     }
 }
