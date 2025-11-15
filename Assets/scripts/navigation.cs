@@ -19,7 +19,14 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
     public List<AudioSource> hotspotAudios = new List<AudioSource>();
     [Tooltip("Assign a GameObject (or parent) that contains the spotlight(s) for each hotspot.")]
     public List<GameObject> hotspotLights = new List<GameObject>();
-    [Tooltip("If true, the first hotspot (index 0) UI/audio/light will be activated at start.")]
+
+    [Header("Per-hotspot object toggles (align with teleportPoints by index)")]
+    [Tooltip("Objects to SetActive(true) when this hotspot becomes active.")]
+    public List<GameObject> hotspotEnableOnActivate = new List<GameObject>();
+    [Tooltip("Objects to SetActive(false) when this hotspot becomes active.")]
+    public List<GameObject> hotspotDisableOnActivate = new List<GameObject>();
+
+    [Tooltip("If true, the first hotspot (index 0) UI/audio/light/toggles will be activated at start.")]
     public bool activateOnStart = true;
 
     [Header("Teleport Settings")]
@@ -66,7 +73,7 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
                 teleportPoints.Add(t);
         }
 
-        // Try auto-fill hotspot lists if lengths mismatch
+        // Try auto-fill hotspot lists so lists align
         TryAutoFillHotspotLists();
 
         CreateInputActions();
@@ -122,6 +129,8 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
         while (hotspotUIs.Count < teleportPoints.Count) hotspotUIs.Add(null);
         while (hotspotAudios.Count < teleportPoints.Count) hotspotAudios.Add(null);
         while (hotspotLights.Count < teleportPoints.Count) hotspotLights.Add(null);
+        while (hotspotEnableOnActivate.Count < teleportPoints.Count) hotspotEnableOnActivate.Add(null);
+        while (hotspotDisableOnActivate.Count < teleportPoints.Count) hotspotDisableOnActivate.Add(null);
 
         // For any null entries, attempt to find child objects under the teleport point:
         for (int i = 0; i < teleportPoints.Count; i++)
@@ -170,6 +179,9 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
                     if (anyLight != null) hotspotLights[i] = anyLight.gameObject;
                 }
             }
+
+            // Note: hotspotEnableOnActivate / hotspotDisableOnActivate are intended to be set manually in inspector.
+            // We won't auto-fill these because specific objects are typically scene-wide; leave them null if not used.
         }
     }
 
@@ -190,13 +202,23 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
             if (hotspotLights[i] != null)
                 hotspotLights[i].SetActive(false);
         }
+
+        // Revert any per-hotspot toggles (set enableOnActivate -> false, disableOnActivate -> true)
+        for (int i = 0; i < teleportPoints.Count; i++)
+        {
+            if (hotspotEnableOnActivate.Count > i && hotspotEnableOnActivate[i] != null)
+                hotspotEnableOnActivate[i].SetActive(false);
+
+            if (hotspotDisableOnActivate.Count > i && hotspotDisableOnActivate[i] != null)
+                hotspotDisableOnActivate[i].SetActive(true);
+        }
     }
 
     void ActivateHotspot(int index)
     {
         if (index < 0 || index >= teleportPoints.Count) return;
 
-        // Deactivate previous (all others)
+        // Deactivate previous (all others) for UI/audio/lights
         for (int i = 0; i < hotspotUIs.Count && i < teleportPoints.Count; i++)
         {
             if (i == index) continue;
@@ -216,7 +238,19 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
                 hotspotLights[i].SetActive(false);
         }
 
-        // Activate current
+        // Revert toggles for other hotspots (in case they were left active)
+        for (int i = 0; i < teleportPoints.Count; i++)
+        {
+            if (i == index) continue;
+
+            if (hotspotEnableOnActivate.Count > i && hotspotEnableOnActivate[i] != null)
+                hotspotEnableOnActivate[i].SetActive(false);
+
+            if (hotspotDisableOnActivate.Count > i && hotspotDisableOnActivate[i] != null)
+                hotspotDisableOnActivate[i].SetActive(true);
+        }
+
+        // Activate current UI/audio/light
         if (hotspotUIs.Count > index && hotspotUIs[index] != null)
             hotspotUIs[index].SetActive(true);
 
@@ -228,6 +262,13 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
 
         if (hotspotLights.Count > index && hotspotLights[index] != null)
             hotspotLights[index].SetActive(true);
+
+        // Apply per-hotspot toggles: enable those that should be active, disable those that should be inactive
+        if (hotspotEnableOnActivate.Count > index && hotspotEnableOnActivate[index] != null)
+            hotspotEnableOnActivate[index].SetActive(true);
+
+        if (hotspotDisableOnActivate.Count > index && hotspotDisableOnActivate[index] != null)
+            hotspotDisableOnActivate[index].SetActive(false);
     }
 
     void Update()
@@ -311,7 +352,7 @@ public class GuitarNavigator_NoFadeSmoothOnly : MonoBehaviour
         // Console message
         Debug.Log($"Teleported to: {t.name} (Index {index})");
 
-        // manage hotspot UI/audio/light: deactivate others, activate this (so user sees the UI during/after teleport)
+        // manage hotspot UI/audio/light/toggles: deactivate others, activate this
         DeactivateAllHotspots();
         ActivateHotspot(index);
 
